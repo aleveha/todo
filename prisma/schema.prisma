@@ -1,0 +1,26 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model todo {
+  id            Int      @id(map: "post_pk") @unique(map: "post_id_uindex") @default(autoincrement())
+  title         String   @db.VarChar(100)
+  note          String?  @db.Text
+  date          DateTime @db.Timestamp() @default(now())
+  is_completed  Boolean  @default(false)
+  user_email    String   @db.VarChar(255)
+  user          user     @relation(fields: [user_email], references: [email], onDelete: Cascade, map: "post_user_nickname_fk")
+
+  @@unique([title, user_email, id], map: "post_user_uindex")
+}
+
+model user {
+  email    String @unique(map: "user_email_uindex") @db.VarChar(255)
+  password String @db.VarChar(255)
+  todos    todo[]
+}

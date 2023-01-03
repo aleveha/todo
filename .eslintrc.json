@@ -1,3 +1,24 @@
 {
-  "extends": "next/core-web-vitals"
+	"root": true,
+	"parser": "@typescript-eslint/parser",
+	"plugins": ["@typescript-eslint"],
+	"rules": {
+		"indent": [
+			"error",
+			"tab",
+			{
+				"SwitchCase": 1
+			}
+		],
+		"linebreak-style": 0,
+		"quotes": ["error", "double"],
+		"semi": ["error", "always"],
+		"@typescript-eslint/no-explicit-any": ["error"]
+	},
+	"extends": [
+		"eslint:recommended",
+		"next/core-web-vitals",
+		"plugin:@typescript-eslint/eslint-recommended",
+		"plugin:@typescript-eslint/recommended"
+	]
 }
