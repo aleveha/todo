@@ -1,5 +1,4 @@
 import { NewTodoForm } from "@components/new-todo-form";
-import { client } from "@databaseClient";
 import { todo as Todo } from "@prisma/client";
 import { userState } from "@states/userState";
 import axios from "axios";
@@ -7,27 +6,35 @@ import clsx from "clsx";
 import { useAtom } from "jotai";
 import { GetServerSideProps, NextPage } from "next";
 import { useRouter } from "next/router";
-import React, { ChangeEvent, useCallback, useEffect, useState } from "react";
+import * as process from "process";
+import React, { ChangeEvent, FC, useCallback, useEffect, useState } from "react";
+import useSWR, { SWRConfig, useSWRConfig } from "swr";
 
-interface Props {
-	userTodos: Todo[] | null;
+function sort(todos: Todo[]) {
+	return todos.sort((a, b) => (a.is_completed === b.is_completed ? b.id - a.id : a.is_completed ? 1 : -1));
 }
 
-const Page: NextPage<Props> = ({ userTodos }) => {
+const Todos: FC = () => {
 	const [user, setUser] = useAtom(userState);
-	const [todos, setTodos] = useState<Todo[] | null>(userTodos);
+	const [editTodo, setEditTodo] = useState<Todo>();
 	const router = useRouter();
+	const { mutate } = useSWRConfig();
 
-	const handleTodoCreated = useCallback(
-		(todo: Todo) =>
-			setTodos(prev => {
-				if (!prev) {
-					return [todo];
-				}
+	const { data: todos } = useSWR<Todo[]>("/api/todo/", () =>
+		axios.get(`/api/todo/${user?.email}`).then(res => res.data),
+	);
 
-				return [todo, ...prev];
-			}),
-		[setTodos],
+	const handleTodoDeleted = useCallback(
+		(todo: Todo) => async () => {
+			const { data: deletedTodo } = await axios.post<Todo>("/api/todo/delete", todo);
+
+			if (!deletedTodo) {
+				return;
+			}
+
+			mutate("/api/todo/");
+		},
+		[mutate],
 	);
 
 	const onTodoCompleted = useCallback(
@@ -41,44 +48,22 @@ const Page: NextPage<Props> = ({ userTodos }) => {
 				return;
 			}
 
-			setTodos(prev => {
-				if (!prev) {
-					return null;
-				}
-
-				return prev
-					.map(t => (t.id === updatedTodo.id ? updatedTodo : t))
-					.sort((a, b) => {
-						if (a.is_completed === b.is_completed) {
-							return b.id - a.id;
-						}
-						return a.is_completed ? 1 : -1;
-					});
-			});
+			mutate("/api/todo/");
 		},
-		[],
-	);
-
-	const handleTodoDeleted = useCallback(
-		(todo: Todo) => async () => {
-			const { data: deletedTodo } = await axios.post<Todo>("/api/todo/delete", todo);
-
-			if (!deletedTodo) {
-				return;
-			}
-
-			setTodos(prev => {
-				if (!prev) {
-					return null;
-				}
-
-				return prev.filter(t => t.id !== deletedTodo.id);
-			});
-		},
-		[],
+		[mutate],
 	);
 
 	const handleOnLogout = useCallback(() => setUser(null), [setUser]);
+
+	const handleTodoEdit = useCallback(
+		(todo: Todo) => () => {
+			setEditTodo(todo);
+			window.scroll(0, 0);
+		},
+		[],
+	);
+
+	const handleTodoEditCancel = useCallback(() => setEditTodo(undefined), []);
 
 	useEffect(() => {
 		if (!user || !todos) {
@@ -111,9 +96,9 @@ const Page: NextPage<Props> = ({ userTodos }) => {
 				</button>
 				<h1 className="text-2xl">Todos ({user.email})</h1>
 			</div>
-			<NewTodoForm handleTodoCreated={handleTodoCreated} />
+			<NewTodoForm defaultValues={editTodo} resetDefaultValue={handleTodoEditCancel} />
 			<div className="flex flex-col space-y-4">
-				{todos.map(todo => (
+				{sort(todos).map(todo => (
 					<div
 						className={clsx(
 							"relative flex items-start rounded-lg border border-gray-300 p-4 pr-12 shadow-sm",
@@ -139,21 +124,38 @@ const Page: NextPage<Props> = ({ userTodos }) => {
 								{new Date(todo.date).toLocaleString("cs")}
 							</span>
 						</div>
-						<button onClick={handleTodoDeleted(todo)}>
-							<svg
-								fill="none"
-								viewBox="0 0 24 24"
-								strokeWidth={2}
-								stroke="currentColor"
-								className="absolute right-4 top-4 h-4 w-4 text-gray-400 hover:text-indigo-700"
-							>
-								<path
-									strokeLinecap="round"
-									strokeLinejoin="round"
-									d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
-								/>
-							</svg>
-						</button>
+						<div className="absolute right-4 top-4 flex flex-col space-y-3">
+							<button onClick={handleTodoDeleted(todo)}>
+								<svg
+									fill="none"
+									viewBox="0 0 24 24"
+									strokeWidth={2}
+									stroke="currentColor"
+									className="h-4 w-4 text-gray-400 hover:text-indigo-700"
+								>
+									<path
+										strokeLinecap="round"
+										strokeLinejoin="round"
+										d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+									/>
+								</svg>
+							</button>
+							<button onClick={handleTodoEdit(todo)}>
+								<svg
+									className="h-4 w-4 text-gray-400 hover:text-indigo-700"
+									fill="none"
+									stroke="currentColor"
+									strokeWidth={2}
+									viewBox="0 0 24 24"
+								>
+									<path
+										strokeLinecap="round"
+										strokeLinejoin="round"
+										d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
+									/>
+								</svg>
+							</button>
+						</div>
 					</div>
 				))}
 			</div>
@@ -161,14 +163,28 @@ const Page: NextPage<Props> = ({ userTodos }) => {
 	);
 };
 
+interface Props {
+	fallback: {
+		"/api/todo/": Todo[];
+	};
+}
+
+const Page: NextPage<Props> = ({ fallback }) => {
+	return (
+		<SWRConfig value={{ fallback }}>
+			<Todos />
+		</SWRConfig>
+	);
+};
+
 export const getServerSideProps: GetServerSideProps<Props> = async ({ params }) => {
-	const userTodos = params?.email
-		? await client.todo.findMany({ where: { user_email: params?.email as string } })
-		: null;
+	const { data: todos } = await axios.get<Todo[]>(`${process.env.NEXT_PUBLIC_API_URL}/api/todo/${params?.email}`);
 
 	return {
 		props: {
-			userTodos: JSON.parse(JSON.stringify(userTodos)),
+			fallback: {
+				"/api/todo/": JSON.parse(JSON.stringify(todos)),
+			},
 		},
 	};
 };

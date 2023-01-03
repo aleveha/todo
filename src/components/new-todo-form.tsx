@@ -2,42 +2,49 @@ import { todo as Todo } from "@prisma/client";
 import { userState } from "@states/userState";
 import axios from "axios";
 import { useAtom } from "jotai";
-import React, { FC, useCallback } from "react";
+import React, { FC, useCallback, useEffect } from "react";
 import { SubmitHandler, useForm } from "react-hook-form";
-
-interface ITodoForm {
-	title: string;
-	note?: string;
-}
+import { useSWRConfig } from "swr";
 
 interface Props {
-	handleTodoCreated: (todo: Todo) => void;
+	defaultValues?: Todo;
+	resetDefaultValue: () => void;
 }
 
-export const NewTodoForm: FC<Props> = ({ handleTodoCreated }) => {
+export const NewTodoForm: FC<Props> = ({ defaultValues, resetDefaultValue }) => {
 	const [user] = useAtom(userState);
+	const { mutate } = useSWRConfig();
 
 	const {
 		register,
 		handleSubmit,
 		formState: { errors },
 		reset,
-	} = useForm<ITodoForm>({
+	} = useForm<Todo>({
 		defaultValues: { title: "" },
 		mode: "onChange",
 	});
 
-	const onSubmit = useCallback<SubmitHandler<ITodoForm>>(
+	const onSubmit = useCallback<SubmitHandler<Todo>>(
 		async values => {
 			if (!user) {
 				return;
 			}
-			const { data: todo } = await axios.post<Todo>("/api/todo/upsert", { ...values, user_email: user.email });
-			handleTodoCreated(todo);
+			await axios.post<Todo>("/api/todo/upsert", {
+				...values,
+				user_email: user.email,
+				date: defaultValues ? new Date() : undefined,
+			});
 			reset();
+			resetDefaultValue();
+			mutate("/api/todo/");
 		},
-		[handleTodoCreated, reset, user],
+		[defaultValues, mutate, reset, resetDefaultValue, user],
 	);
+
+	useEffect(() => {
+		reset(defaultValues ?? { title: "", note: "" });
+	}, [defaultValues, reset]);
 
 	return (
 		<form onSubmit={handleSubmit(onSubmit)}>
@@ -68,7 +75,7 @@ export const NewTodoForm: FC<Props> = ({ handleTodoCreated }) => {
 				<div className="flex items-center justify-between space-x-3 border-t border-gray-200 px-2 py-2 sm:px-3">
 					<div className="flex-shrink-0">
 						<button type="submit" className="ui-button">
-							Create
+							{defaultValues ? "Update" : "Create"}
 						</button>
 					</div>
 				</div>
