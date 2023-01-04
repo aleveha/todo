@@ -1,6 +1,7 @@
+import { FilterRadioButtonGroup } from "@components/filter-radio-button-group";
 import { NewTodoForm } from "@components/new-todo-form";
 import { todo as Todo } from "@prisma/client";
-import { userState } from "@states/userState";
+import { Filter, userState } from "@states/userState";
 import axios from "axios";
 import clsx from "clsx";
 import { useAtom } from "jotai";
@@ -10,8 +11,15 @@ import * as process from "process";
 import React, { ChangeEvent, FC, useCallback, useEffect, useState } from "react";
 import useSWR, { SWRConfig, useSWRConfig } from "swr";
 
-function sort(todos: Todo[]) {
-	return todos.sort((a, b) => (a.is_completed === b.is_completed ? b.id - a.id : a.is_completed ? 1 : -1));
+function sort(todos: Todo[], filter: Filter) {
+	switch (filter) {
+		case Filter.completed:
+			return todos.filter(todo => todo.is_completed);
+		case Filter.incompleted:
+			return todos.filter(todo => !todo.is_completed);
+		default:
+			return todos.sort((a, b) => (a.is_completed === b.is_completed ? b.id - a.id : a.is_completed ? 1 : -1));
+	}
 }
 
 const Todos: FC = () => {
@@ -32,7 +40,7 @@ const Todos: FC = () => {
 				return;
 			}
 
-			mutate("/api/todo/");
+			await mutate("/api/todo/");
 		},
 		[mutate],
 	);
@@ -48,7 +56,7 @@ const Todos: FC = () => {
 				return;
 			}
 
-			mutate("/api/todo/");
+			await mutate("/api/todo/");
 		},
 		[mutate],
 	);
@@ -64,6 +72,11 @@ const Todos: FC = () => {
 	);
 
 	const handleTodoEditCancel = useCallback(() => setEditTodo(undefined), []);
+
+	const handleFilterChange = useCallback(
+		(value: Filter) => () => setUser(prev => prev && { ...prev, sorting: value }),
+		[setUser],
+	);
 
 	useEffect(() => {
 		if (!user || !todos) {
@@ -96,9 +109,12 @@ const Todos: FC = () => {
 				</button>
 				<h1 className="text-2xl">Todos ({user.email})</h1>
 			</div>
-			<NewTodoForm defaultValues={editTodo} resetDefaultValue={handleTodoEditCancel} />
 			<div className="flex flex-col space-y-4">
-				{sort(todos).map(todo => (
+				<NewTodoForm defaultValues={editTodo} resetDefaultValue={handleTodoEditCancel} />
+				<FilterRadioButtonGroup handleFilterChange={handleFilterChange} state={user.sorting || Filter.all} />
+			</div>
+			<div className="flex flex-col space-y-4">
+				{sort(todos, user.sorting ?? Filter.all).map(todo => (
 					<div
 						className={clsx(
 							"relative flex items-start rounded-lg border border-gray-300 p-4 pr-12 shadow-sm",
