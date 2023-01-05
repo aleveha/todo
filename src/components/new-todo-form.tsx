@@ -2,8 +2,8 @@ import { todo as Todo } from "@prisma/client";
 import { userState } from "@states/userState";
 import axios from "axios";
 import { useAtom } from "jotai";
-import React, { FC, useCallback, useEffect } from "react";
-import { SubmitHandler, useForm } from "react-hook-form";
+import React, { FC, useEffect } from "react";
+import { useForm } from "react-hook-form";
 import { useSWRConfig } from "swr";
 
 interface Props {
@@ -25,22 +25,19 @@ export const NewTodoForm: FC<Props> = ({ defaultValues, resetDefaultValue }) => 
 		mode: "onChange",
 	});
 
-	const onSubmit = useCallback<SubmitHandler<Todo>>(
-		async values => {
-			if (!user) {
-				return;
-			}
-			await axios.post<Todo>("/api/todo/upsert", {
-				...values,
-				user_email: user.email,
-				date: defaultValues ? new Date() : undefined,
-			});
-			reset();
-			resetDefaultValue();
-			mutate("/api/todo/");
-		},
-		[defaultValues, mutate, reset, resetDefaultValue, user],
-	);
+	const onSubmit = async (values: Todo) => {
+		if (!user) {
+			return;
+		}
+		await axios.post<Todo>("/api/todo/upsert", {
+			...values,
+			user_email: user.email,
+			date: defaultValues ? new Date() : undefined,
+		});
+		reset();
+		resetDefaultValue();
+		await mutate("/api/todo/");
+	};
 
 	useEffect(() => {
 		reset(defaultValues ?? { title: "", note: "" });

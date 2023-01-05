@@ -8,7 +8,7 @@ import { useAtom } from "jotai";
 import { GetServerSideProps, NextPage } from "next";
 import { useRouter } from "next/router";
 import * as process from "process";
-import React, { ChangeEvent, FC, useCallback, useEffect, useState } from "react";
+import React, { ChangeEvent, FC, useEffect, useState } from "react";
 import useSWR, { SWRConfig, useSWRConfig } from "swr";
 
 function sort(todos: Todo[], filter: Filter) {
@@ -32,51 +32,30 @@ const Todos: FC = () => {
 		axios.get(`/api/todo/${user?.email}`).then(res => res.data),
 	);
 
-	const handleTodoDeleted = useCallback(
-		(todo: Todo) => async () => {
-			const { data: deletedTodo } = await axios.post<Todo>("/api/todo/delete", todo);
+	const handleTodoDeleted = (todo: Todo) => async () => {
+		await axios.post<Todo>("/api/todo/delete", todo);
+		await mutate("/api/todo/");
+	};
 
-			if (!deletedTodo) {
-				return;
-			}
+	const onTodoCompleted = (todo: Todo) => async (event: ChangeEvent<HTMLInputElement>) => {
+		await axios.post<Todo>("/api/todo/upsert", {
+			...todo,
+			is_completed: event.target.checked,
+		});
 
-			await mutate("/api/todo/");
-		},
-		[mutate],
-	);
+		await mutate("/api/todo/");
+	};
 
-	const onTodoCompleted = useCallback(
-		(todo: Todo) => async (event: ChangeEvent<HTMLInputElement>) => {
-			const { data: updatedTodo } = await axios.post<Todo>("/api/todo/upsert", {
-				...todo,
-				is_completed: event.target.checked,
-			});
+	const handleOnLogout = () => setUser(null);
 
-			if (!updatedTodo) {
-				return;
-			}
+	const handleTodoEdit = (todo: Todo) => () => {
+		setEditTodo(todo);
+		window.scroll(0, 0);
+	};
 
-			await mutate("/api/todo/");
-		},
-		[mutate],
-	);
+	const handleTodoEditCancel = () => setEditTodo(undefined);
 
-	const handleOnLogout = useCallback(() => setUser(null), [setUser]);
-
-	const handleTodoEdit = useCallback(
-		(todo: Todo) => () => {
-			setEditTodo(todo);
-			window.scroll(0, 0);
-		},
-		[],
-	);
-
-	const handleTodoEditCancel = useCallback(() => setEditTodo(undefined), []);
-
-	const handleFilterChange = useCallback(
-		(value: Filter) => () => setUser(prev => prev && { ...prev, sorting: value }),
-		[setUser],
-	);
+	const handleFilterChange = (value: Filter) => () => setUser(prev => prev && { ...prev, sorting: value });
 
 	useEffect(() => {
 		if (!user || !todos) {
